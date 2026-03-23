@@ -22,6 +22,32 @@ Run the UI with:
 streamlit run app.py
 ```
 
+
+## Railway Deployment
+
+This repo includes a `railway.json` config file for Railway config-as-code deployment and a `.streamlit/config.toml` file for headless Streamlit startup.
+
+### Deploy from GitHub to Railway
+
+1. Push this repository to GitHub.
+2. In Railway, create a new project and choose **Deploy from GitHub repo**.
+3. Select this repository.
+4. Railway will build the app with Railpack and use the start command defined in `railway.json`.
+5. After the first successful deploy, generate a public domain in Railway Networking.
+
+### Included Railway start command
+
+```bash
+streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
+```
+
+### Included Railway files
+
+- `railway.json`: build and deploy config
+- `.streamlit/config.toml`: Streamlit server settings for cloud startup
+
+No extra application environment variables are required for the demo version.
+
 ## Overview
 
 This project demonstrates a practical Python automation workflow for handling repetitive file-processing tasks. It imports multiple Excel and CSV files, normalizes inconsistent column names, cleans common data issues, removes duplicates, generates summary reports, and archives processed files.
@@ -126,6 +152,11 @@ Normalized output values:
 ## Installation
 
 ### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-username/python-file-automation-demo.git
+cd python-file-automation-demo
+```
 
 ### 2. Create and activate a virtual environment
 
