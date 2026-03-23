@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
@@ -75,6 +76,33 @@ def _clean_digits_only(value: object) -> str | None:
     return digits or None
 
 
+def _clean_amount_decimal(value: object) -> str | None:
+    text = _to_optional_text(value)
+    if text is None:
+        return None
+
+    negative = False
+    if text.startswith("(") and text.endswith(")"):
+        negative = True
+        text = text[1:-1].strip()
+
+    text = text.replace(",", "")
+    text = re.sub(r"[^\d.\-]", "", text)
+
+    if text.count(".") > 1 or text in {"", "-", ".", "-."}:
+        return None
+
+    try:
+        amount = Decimal(text)
+    except InvalidOperation:
+        return None
+
+    if negative:
+        amount = -amount
+
+    return f"{amount:.2f}"
+
+
 def _clean_date(value: object, output_format: str) -> str | None:
     if pd.isna(value):
         return None
@@ -111,6 +139,9 @@ def apply_cleaning_rules(
 
     for column in cleaning_rules.get("digits_only", []):
         dataframe[column] = dataframe[column].apply(_clean_digits_only)
+
+    for column in cleaning_rules.get("amount_decimal", []):
+        dataframe[column] = dataframe[column].apply(_clean_amount_decimal)
 
     for column, output_format in cleaning_rules.get("date_format", {}).items():
         dataframe[column] = dataframe[column].apply(lambda value: _clean_date(value, output_format))

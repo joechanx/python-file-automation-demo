@@ -131,6 +131,64 @@ Examples of changes that can often be handled without rewriting the main workflo
 - changing output column order
 - dropping unnecessary columns
 
+## Amount Normalization Rule
+
+This project also includes an extensible field transformation example for financial values through the `amount_decimal` rule.
+
+In many real business files, amount-related fields may appear in inconsistent formats such as:
+
+- `1000`
+- `1,000`
+- `$1,000`
+- `NT$ 1,000.5`
+- `(1,200.75)`
+
+The workflow can normalize these values into a consistent decimal format, for example:
+
+- `1000.00`
+- `1000.00`
+- `1000.00`
+- `1000.50`
+- `-1200.75`
+
+This makes the automation more practical for client-facing use cases where spreadsheet exports often contain currency symbols, separators, or accounting-style negative values.
+
+### Why This Matters
+
+This rule demonstrates that the workflow is not limited to column mapping and basic cleanup only. It can also be extended with custom Python-based transformation rules for fields that require business-oriented normalization.
+
+That makes the project closer to a real deliverable automation solution:
+
+- schema changes can be handled through JSON config
+- custom transformation logic can be added through reusable Python rules
+
+### Example Configuration
+
+In `config/rules.json`:
+
+```json
+{
+  "cleaning_rules": {
+    "amount_decimal": ["amount"]
+  }
+}
+```
+
+In `config/column_mapping.json`, multiple source columns can be mapped to the standard `amount` field, such as:
+
+- `amount`
+- `total_amount`
+- `price`
+- `order_amount`
+- `payment_amount`
+- `invoice_amount`
+
+### Business Value
+
+This design reflects a more realistic automation workflow for operational or finance-related spreadsheets, where both structural flexibility and field-level normalization are important.
+
+Instead of building a one-off script for a single file format, the project demonstrates how to support evolving input schemas while keeping the processing logic maintainable and extensible.
+
 ## Installation
 
 ### 1. Clone the repository
@@ -280,6 +338,8 @@ This project is designed to demonstrate how Python can reduce repetitive manual 
 
 It is not just a one-off script. It shows how to build a reusable automation workflow that remains maintainable when file schemas evolve over time.
 
+This project demonstrates both config-driven schema handling and extensible field transformation rules, making it suitable for automation scenarios where input files change over time and certain fields require standardized business formatting.
+
 ## Possible Future Improvements
 
 - CLI arguments for custom input/output paths
@@ -303,4 +363,3 @@ It is not just a one-off script. It shows how to build a reusable automation wor
 ## License
 
 This project is provided for demonstration and portfolio purposes.
-

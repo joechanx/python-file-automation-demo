@@ -36,5 +36,13 @@
     "status",
     "lead_status",
     "customer_status"
+  ],
+  "amount": [
+    "amount",
+    "total_amount",
+    "price",
+    "order_amount",
+    "payment_amount",
+    "invoice_amount"
   ]
 }

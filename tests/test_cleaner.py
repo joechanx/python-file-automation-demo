@@ -96,3 +96,30 @@ def test_internal_source_file_column_is_preserved() -> None:
     dataframe = pd.DataFrame({"_source_file": ["sample.csv"]})
     standardized = standardize_columns(dataframe, column_aliases=load_column_aliases())
     assert list(standardized.columns) == ["_source_file"]
+
+
+
+def test_apply_cleaning_rules_normalizes_amount_decimal() -> None:
+    dataframe = pd.DataFrame(
+        {
+            "amount": ["1000", "1,000", "$1,000", "NT$ 1,000.5", "(1,200.75)", None, "abc"]
+        }
+    )
+
+    rules = {
+        "cleaning_rules": {
+            "amount_decimal": ["amount"]
+        }
+    }
+
+    cleaned = apply_cleaning_rules(dataframe, rules=rules)
+
+    assert cleaned["amount"].tolist() == [
+        "1000.00",
+        "1000.00",
+        "1000.00",
+        "1000.50",
+        "-1200.75",
+        None,
+        None,
+    ]

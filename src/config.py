@@ -44,6 +44,7 @@ def get_standard_columns() -> list[str]:
         rules.get("cleaning_rules", {}).get("trim_whitespace", []),
         rules.get("cleaning_rules", {}).get("lowercase", []),
         rules.get("cleaning_rules", {}).get("digits_only", []),
+        rules.get("cleaning_rules", {}).get("amount_decimal", []),
         list(rules.get("cleaning_rules", {}).get("date_format", {}).keys()),
     ]:
         for column in bucket:

@@ -12,6 +12,7 @@
     "date",
     "company",
     "status",
+    "amount",
     "_source_file"
   ],
   "drop_columns": [],
@@ -36,6 +37,9 @@
     ],
     "date_format": {
       "date": "%Y-%m-%d"
-    }
+    },
+    "amount_decimal": [
+      "amount"
+    ]
   }
 }
