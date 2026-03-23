@@ -4,5 +4,9 @@
   "rows_after_cleaning": 4,
   "duplicates_removed": 1,
   "invalid_rows": 3,
-  "output_file": "output/master.csv"
+  "output_file": "output/master.csv",
+  "config_files": [
+    "config/column_mapping.json",
+    "config/rules.json"
+  ]
 }

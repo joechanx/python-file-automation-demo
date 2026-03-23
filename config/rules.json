@@ -1,0 +1,41 @@
+{
+  "required_columns": [
+    "name",
+    "email",
+    "phone",
+    "date"
+  ],
+  "output_columns": [
+    "name",
+    "email",
+    "phone",
+    "date",
+    "company",
+    "status",
+    "_source_file"
+  ],
+  "drop_columns": [],
+  "dedupe_keys_primary": [
+    "email"
+  ],
+  "dedupe_keys_fallback": [
+    "name",
+    "phone"
+  ],
+  "cleaning_rules": {
+    "trim_whitespace": [
+      "name",
+      "company",
+      "status"
+    ],
+    "lowercase": [
+      "email"
+    ],
+    "digits_only": [
+      "phone"
+    ],
+    "date_format": {
+      "date": "%Y-%m-%d"
+    }
+  }
+}
