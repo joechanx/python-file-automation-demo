@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
 try:
@@ -14,6 +12,7 @@ try:
     )
     from .config import load_column_aliases, load_rules
     from .merger import merge_dataframes
+    from .web_extractor import extract_web_records
 except ImportError:
     from cleaner import (
         apply_cleaning_rules,
@@ -24,6 +23,30 @@ except ImportError:
     )
     from config import load_column_aliases, load_rules
     from merger import merge_dataframes
+    from web_extractor import extract_web_records
+
+
+def _empty_result() -> dict:
+    empty = pd.DataFrame()
+    summary = {
+        'source_mode': 'none',
+        'files_processed': 0,
+        'rows_read': 0,
+        'rows_after_cleaning': 0,
+        'duplicates_removed': 0,
+        'invalid_rows': 0,
+        'output_file': 'output/master.csv',
+        'config_files': ['config/column_mapping.json', 'config/rules.json'],
+    }
+    return {
+        'merged': empty,
+        'cleaned': empty,
+        'valid': empty,
+        'invalid': empty,
+        'output': empty,
+        'rejected': empty,
+        'summary': summary,
+    }
 
 
 def process_dataframes(
@@ -44,30 +67,11 @@ def process_dataframes(
         prepared_frames.append(frame)
 
     if not prepared_frames:
-        empty = pd.DataFrame()
-        summary = {
-            'files_processed': 0,
-            'rows_read': 0,
-            'rows_after_cleaning': 0,
-            'duplicates_removed': 0,
-            'invalid_rows': 0,
-            'output_file': 'output/master.csv',
-            'config_files': ['config/column_mapping.json', 'config/rules.json'],
-        }
-        return {
-            'merged': empty,
-            'cleaned': empty,
-            'valid': empty,
-            'invalid': empty,
-            'output': empty,
-            'rejected': empty,
-            'summary': summary,
-        }
+        return _empty_result()
 
     standardized_frames = [standardize_columns(dataframe, column_aliases=aliases) for dataframe in prepared_frames]
     merged_dataframe = merge_dataframes(standardized_frames)
     cleaned_dataframe = apply_cleaning_rules(merged_dataframe, rules=resolved_rules)
-
     valid_rows, invalid_rows = split_valid_and_invalid_rows(
         cleaned_dataframe,
         required_columns=resolved_rules.get('required_columns', []),
@@ -77,7 +81,6 @@ def process_dataframes(
         primary_keys=resolved_rules.get('dedupe_keys_primary', []),
         fallback_keys=resolved_rules.get('dedupe_keys_fallback', []),
     )
-
     output_dataframe = prepare_output_dataframe(
         deduplicated_rows,
         output_columns=resolved_rules.get('output_columns', []),
@@ -90,8 +93,9 @@ def process_dataframes(
     )
 
     summary = {
-        'files_processed': len(source_names),
-        'rows_read': int(len(merged_dataframe)),
+        'source_mode': 'files',
+        'files_processed': int(len(prepared_frames)),
+        'rows_read': int(sum(len(dataframe) for dataframe in prepared_frames)),
         'rows_after_cleaning': int(len(output_dataframe)),
         'duplicates_removed': int(duplicates_removed),
         'invalid_rows': int(len(rejected_dataframe)),
@@ -108,3 +112,29 @@ def process_dataframes(
         'rejected': rejected_dataframe,
         'summary': summary,
     }
+
+
+def process_urls(
+    urls: list[str],
+    extract_fields: list[str] | None = None,
+    fetch_html_func=None,
+    column_aliases: dict[str, list[str]] | None = None,
+    rules: dict | None = None,
+) -> dict:
+    extracted_dataframe = extract_web_records(
+        urls=urls,
+        extract_fields=extract_fields,
+        fetch_html_func=fetch_html_func,
+    )
+    result = process_dataframes(
+        dataframes=[extracted_dataframe] if not extracted_dataframe.empty else [],
+        file_names=['url_import'],
+        column_aliases=column_aliases,
+        rules=rules,
+    )
+    result['extracted'] = extracted_dataframe
+    result['summary']['source_mode'] = 'web'
+    result['summary']['urls_processed'] = int(len(urls))
+    result['summary']['successful_fetches'] = int((extracted_dataframe.get('fetch_status') == 'ok').sum()) if not extracted_dataframe.empty else 0
+    result['summary']['failed_fetches'] = int((extracted_dataframe.get('fetch_status') == 'error').sum()) if not extracted_dataframe.empty else 0
+    return result

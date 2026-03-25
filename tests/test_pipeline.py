@@ -35,3 +35,47 @@ def test_process_dataframes_returns_summary_and_output() -> None:
     assert result['summary']['duplicates_removed'] == 1
     assert list(result['output'].columns) == load_rules()['output_columns']
     assert result['output'].iloc[0]['amount'] == '1000.00'
+
+
+
+def test_process_urls_extracts_and_processes_web_records() -> None:
+    from src.pipeline import process_urls
+
+    def fake_fetch(url: str) -> str:
+        if 'bad' in url:
+            raise ValueError('fetch failed')
+        return """
+        <html>
+          <head><title>Example Title</title><meta name="description" content="Demo description"></head>
+          <body><h1>Example Heading</h1><p>Email contact@example.com</p></body>
+        </html>
+        """
+
+    web_rules = {
+        'required_columns': ['source_url'],
+        'output_columns': ['source_url', 'page_title', 'meta_description', 'h1', 'emails_found', 'fetch_status', 'fetch_error'],
+        'drop_columns': [],
+        'dedupe_keys_primary': ['source_url'],
+        'dedupe_keys_fallback': ['page_title'],
+        'cleaning_rules': {
+            'trim_whitespace': ['source_url', 'page_title', 'meta_description', 'h1', 'emails_found', 'fetch_status', 'fetch_error'],
+            'lowercase': [],
+            'digits_only': [],
+            'amount_decimal': [],
+            'date_format': {},
+        },
+    }
+
+    result = process_urls(
+        urls=['https://example.com', 'https://bad.example.com'],
+        extract_fields=['page_title', 'meta_description', 'h1', 'emails_found'],
+        fetch_html_func=fake_fetch,
+        rules=web_rules,
+    )
+
+    assert result['summary']['source_mode'] == 'web'
+    assert result['summary']['urls_processed'] == 2
+    assert result['summary']['failed_fetches'] == 1
+    assert 'source_url' in result['output'].columns
+    assert result['output'].iloc[0]['source_url'] == 'https://example.com'
+    assert len(result['extracted']) == 2

@@ -27,7 +27,15 @@
     "trim_whitespace": [
       "name",
       "company",
-      "status"
+      "status",
+      "page_title",
+      "meta_description",
+      "h1",
+      "emails_found",
+      "phones_found",
+      "fetch_status",
+      "fetch_error",
+      "source_url"
     ],
     "lowercase": [
       "email"

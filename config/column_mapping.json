@@ -44,5 +44,49 @@
     "order_amount",
     "payment_amount",
     "invoice_amount"
+  ],
+  "source_url": [
+    "source_url",
+    "url",
+    "page_url",
+    "website_url",
+    "link"
+  ],
+  "page_title": [
+    "page_title",
+    "title",
+    "meta_title"
+  ],
+  "meta_description": [
+    "meta_description",
+    "description",
+    "meta_desc"
+  ],
+  "h1": [
+    "h1",
+    "page_h1",
+    "headline"
+  ],
+  "emails_found": [
+    "emails_found",
+    "emails",
+    "email_list",
+    "found_emails"
+  ],
+  "phones_found": [
+    "phones_found",
+    "phones",
+    "phone_list",
+    "found_phones"
+  ],
+  "fetch_status": [
+    "fetch_status",
+    "status",
+    "crawl_status"
+  ],
+  "fetch_error": [
+    "fetch_error",
+    "error",
+    "crawl_error"
   ]
 }

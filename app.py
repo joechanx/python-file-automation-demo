@@ -9,7 +9,20 @@ import streamlit as st
 
 from src.cleaner import normalize_header
 from src.config import INPUT_DIR, load_column_aliases, load_rules
-from src.pipeline import process_dataframes
+from src.pipeline import process_dataframes, process_urls
+from src.url_loader import load_urls_from_file, parse_pasted_urls
+
+WEB_FIELDS = [
+    'source_url',
+    'page_title',
+    'meta_description',
+    'h1',
+    'emails_found',
+    'phones_found',
+    'fetch_status',
+    'fetch_error',
+]
+WEB_EXTRACTABLE_FIELDS = ['page_title', 'meta_description', 'h1', 'emails_found', 'phones_found']
 
 
 def read_uploaded_dataframe(file_name: str, payload: bytes) -> pd.DataFrame:
@@ -111,139 +124,177 @@ def summary_to_json_bytes(summary: dict) -> bytes:
     return json.dumps(summary, indent=2, ensure_ascii=False).encode('utf-8')
 
 
-def get_available_input() -> tuple[list[pd.DataFrame], list[str]]:
+def get_available_input() -> dict:
     source_mode = st.radio(
         'Data source',
-        options=['Use bundled demo files', 'Upload my own files'],
-        horizontal=True,
+        options=[
+            'Use bundled demo files',
+            'Upload my own files',
+            'Enter a single URL',
+            'Upload a URL list',
+            'Paste a URL list',
+        ],
     )
 
     if source_mode == 'Use bundled demo files':
         dataframes, file_names = load_demo_data()
         st.caption('Loaded bundled sample files from the input/ folder for quick demo use.')
-        return dataframes, file_names
+        return {'kind': 'files', 'dataframes': dataframes, 'file_names': file_names}
 
-    uploaded_files = st.file_uploader(
-        'Upload CSV or XLSX files',
-        type=['csv', 'xlsx'],
-        accept_multiple_files=True,
-    )
-    if not uploaded_files:
-        return [], []
+    if source_mode == 'Upload my own files':
+        uploaded_files = st.file_uploader(
+            'Upload CSV or XLSX files',
+            type=['csv', 'xlsx'],
+            accept_multiple_files=True,
+        )
+        if not uploaded_files:
+            return {'kind': 'files', 'dataframes': [], 'file_names': []}
 
-    dataframes = [read_uploaded_dataframe(file.name, file.getvalue()) for file in uploaded_files]
-    file_names = [file.name for file in uploaded_files]
-    return dataframes, file_names
+        dataframes = [read_uploaded_dataframe(file.name, file.getvalue()) for file in uploaded_files]
+        file_names = [file.name for file in uploaded_files]
+        return {'kind': 'files', 'dataframes': dataframes, 'file_names': file_names}
+
+    if source_mode == 'Enter a single URL':
+        url = st.text_input('Public webpage URL', placeholder='https://example.com')
+        urls = [url] if url else []
+        return {'kind': 'web', 'urls': urls, 'labels': urls}
+
+    if source_mode == 'Upload a URL list':
+        uploaded_url_file = st.file_uploader('Upload a CSV or TXT URL list', type=['csv', 'txt', 'md'])
+        if not uploaded_url_file:
+            return {'kind': 'web', 'urls': [], 'labels': []}
+        try:
+            urls = load_urls_from_file(uploaded_url_file.name, uploaded_url_file.getvalue())
+        except ValueError as exc:
+            st.error(str(exc))
+            return {'kind': 'web', 'urls': [], 'labels': []}
+        return {'kind': 'web', 'urls': urls, 'labels': [uploaded_url_file.name]}
+
+    pasted_urls = st.text_area('Paste one URL per line', placeholder='https://example.com\nhttps://www.python.org')
+    urls = parse_pasted_urls(pasted_urls) if pasted_urls else []
+    return {'kind': 'web', 'urls': urls, 'labels': ['pasted_url_list'] if urls else []}
 
 
 def main() -> None:
-    st.set_page_config(page_title='Python File Automation Demo', page_icon='📁', layout='wide')
-    st.title('Python File Automation Demo UI')
+    st.set_page_config(page_title='Python File + Web Data Automation Demo', page_icon='📁', layout='wide')
+    st.title('Python File + Web Data Automation Demo')
     st.write(
-        'Configure field mapping and cleanup rules through a simple interface instead of editing raw JSON files.'
+        'Combine file processing with lightweight public webpage data extraction, then clean, deduplicate, and export the results through a simple interface.'
     )
 
     base_aliases = load_column_aliases()
     base_rules = load_rules()
 
-    dataframes, file_names = get_available_input()
-    if not dataframes:
+    source = get_available_input()
+    source_kind = source['kind']
+
+    if source_kind == 'files' and not source.get('dataframes'):
         st.info('Add files or use the bundled demo files to start.')
         return
+    if source_kind == 'web' and not source.get('urls'):
+        st.info('Enter a URL or provide a URL list to start.')
+        return
 
-    source_dataframe = pd.concat(dataframes, ignore_index=True)
-    available_columns = [column for column in source_dataframe.columns if column != '_source_file']
-    default_mapping = build_default_field_mapping(available_columns, base_aliases)
+    generated_aliases = base_aliases.copy()
+    selected_web_fields = WEB_EXTRACTABLE_FIELDS.copy()
 
-    st.subheader('1) Source files')
-    st.write(', '.join(file_names))
-    with st.expander('Preview raw data', expanded=False):
-        st.dataframe(source_dataframe.head(20), use_container_width=True)
+    if source_kind == 'files':
+        dataframes = source['dataframes']
+        file_names = source['file_names']
+        source_dataframe = pd.concat(dataframes, ignore_index=True)
+        available_columns = [column for column in source_dataframe.columns if column != '_source_file']
+        default_mapping = build_default_field_mapping(available_columns, base_aliases)
 
-    st.subheader('2) Field mapping')
-    select_options = ['— Not mapped —', *available_columns]
-    selected_mapping: dict[str, str | None] = {}
-    columns = st.columns(2)
-    standard_fields = list(base_aliases.keys())
-    for index, field in enumerate(standard_fields):
-        default_value = default_mapping.get(field)
-        if default_value and default_value in select_options:
-            default_index = select_options.index(default_value)
-        else:
-            default_index = 0
-        with columns[index % 2]:
-            selection = st.selectbox(
-                f'{field} column',
-                options=select_options,
-                index=default_index,
-                key=f'map_{field}',
-            )
-            selected_mapping[field] = None if selection == '— Not mapped —' else selection
+        st.subheader('1) Source files')
+        st.write(', '.join(file_names))
+        with st.expander('Preview raw data', expanded=False):
+            st.dataframe(source_dataframe.head(20), use_container_width=True)
 
-    mapped_fields = [field for field, value in selected_mapping.items() if value]
-    default_required = [field for field in base_rules.get('required_columns', []) if field in standard_fields]
-    default_output = [field for field in base_rules.get('output_columns', []) if field in standard_fields]
-    if '_source_file' in base_rules.get('output_columns', []):
-        include_source_file_default = True
+        st.subheader('2) Field mapping')
+        select_options = ['— Not mapped —', *available_columns]
+        selected_mapping: dict[str, str | None] = {}
+        columns = st.columns(2)
+        standard_fields = list(base_aliases.keys())
+        for index, field in enumerate(standard_fields):
+            default_value = default_mapping.get(field)
+            default_index = select_options.index(default_value) if default_value in select_options else 0
+            with columns[index % 2]:
+                selection = st.selectbox(
+                    f'{field} column',
+                    options=select_options,
+                    index=default_index,
+                    key=f'map_{field}',
+                )
+                selected_mapping[field] = None if selection == '— Not mapped —' else selection
+
+        generated_aliases = build_column_aliases_from_ui(selected_mapping, base_aliases)
+        processing_fields = list(base_aliases.keys())
+        default_required = [field for field in base_rules.get('required_columns', []) if field in processing_fields]
+        default_output = [field for field in base_rules.get('output_columns', []) if field in processing_fields]
+        include_source_file_default = '_source_file' in base_rules.get('output_columns', [])
+        default_dedupe_primary = base_rules.get('dedupe_keys_primary', [])
+        default_dedupe_fallback = base_rules.get('dedupe_keys_fallback', [])
     else:
+        urls = source['urls']
+        st.subheader('1) URL intake')
+        st.write(f'{len(urls)} URL(s) ready for extraction.')
+        with st.expander('Preview URLs', expanded=False):
+            st.write(urls)
+
+        st.subheader('2) Web extraction fields')
+        selected_web_fields = st.multiselect(
+            'Select fields to extract from public webpages',
+            options=WEB_EXTRACTABLE_FIELDS,
+            default=WEB_EXTRACTABLE_FIELDS,
+        )
+        st.caption('The extractor always includes source_url, fetch_status, and fetch_error for traceability.')
+        processing_fields = WEB_FIELDS
+        default_required = ['source_url']
+        default_output = ['source_url', *selected_web_fields, 'fetch_status', 'fetch_error']
         include_source_file_default = False
+        default_dedupe_primary = ['source_url']
+        default_dedupe_fallback = ['page_title']
 
     st.subheader('3) Processing rules')
     left, right = st.columns(2)
     with left:
         required_columns = st.multiselect(
             'Required fields',
-            options=standard_fields,
+            options=processing_fields,
             default=default_required,
         )
         output_columns = st.multiselect(
             'Output fields',
-            options=standard_fields,
+            options=processing_fields,
             default=default_output,
         )
         include_source_file = st.checkbox('Include source file in output', value=include_source_file_default)
         dedupe_primary = st.multiselect(
             'Primary dedupe keys',
-            options=standard_fields,
-            default=base_rules.get('dedupe_keys_primary', []),
+            options=processing_fields,
+            default=[field for field in default_dedupe_primary if field in processing_fields],
         )
         dedupe_fallback = st.multiselect(
             'Fallback dedupe keys',
-            options=standard_fields,
-            default=base_rules.get('dedupe_keys_fallback', []),
+            options=processing_fields,
+            default=[field for field in default_dedupe_fallback if field in processing_fields],
         )
 
     cleaning_rules = base_rules.get('cleaning_rules', {})
     with right:
-        trim_columns = st.multiselect(
-            'Trim whitespace',
-            options=standard_fields,
-            default=cleaning_rules.get('trim_whitespace', []),
-        )
-        lowercase_columns = st.multiselect(
-            'Lowercase text',
-            options=standard_fields,
-            default=cleaning_rules.get('lowercase', []),
-        )
-        digits_only_columns = st.multiselect(
-            'Digits only',
-            options=standard_fields,
-            default=cleaning_rules.get('digits_only', []),
-        )
-        amount_columns = st.multiselect(
-            'Normalize amount fields',
-            options=standard_fields,
-            default=cleaning_rules.get('amount_decimal', []),
-        )
-        default_date_columns = list(cleaning_rules.get('date_format', {}).keys())
-        date_columns = st.multiselect(
-            'Normalize date fields',
-            options=standard_fields,
-            default=default_date_columns,
-        )
+        trim_default = [field for field in cleaning_rules.get('trim_whitespace', []) if field in processing_fields]
+        lower_default = [field for field in cleaning_rules.get('lowercase', []) if field in processing_fields]
+        digits_default = [field for field in cleaning_rules.get('digits_only', []) if field in processing_fields]
+        amount_default = [field for field in cleaning_rules.get('amount_decimal', []) if field in processing_fields]
+        date_default = [field for field in cleaning_rules.get('date_format', {}).keys() if field in processing_fields]
+
+        trim_columns = st.multiselect('Trim whitespace', options=processing_fields, default=trim_default)
+        lowercase_columns = st.multiselect('Lowercase text', options=processing_fields, default=lower_default)
+        digits_only_columns = st.multiselect('Digits only', options=processing_fields, default=digits_default)
+        amount_columns = st.multiselect('Normalize amount fields', options=processing_fields, default=amount_default)
+        date_columns = st.multiselect('Normalize date fields', options=processing_fields, default=date_default)
         date_format = st.text_input('Date output format', value='%Y-%m-%d')
 
-    generated_aliases = build_column_aliases_from_ui(selected_mapping, base_aliases)
     final_output_columns = output_columns.copy()
     if include_source_file and '_source_file' not in final_output_columns:
         final_output_columns.append('_source_file')
@@ -268,19 +319,29 @@ def main() -> None:
         with preview_right:
             st.code(json.dumps(generated_rules, indent=2, ensure_ascii=False), language='json')
 
-    if st.button('Run automation', type='primary', use_container_width=True):
-        result = process_dataframes(
-            dataframes=dataframes,
-            file_names=file_names,
-            column_aliases=generated_aliases,
-            rules=generated_rules,
-        )
+    button_label = 'Run file automation' if source_kind == 'files' else 'Fetch and process URLs'
+    if st.button(button_label, type='primary', use_container_width=True):
+        if source_kind == 'files':
+            result = process_dataframes(
+                dataframes=source['dataframes'],
+                file_names=source['file_names'],
+                column_aliases=generated_aliases,
+                rules=generated_rules,
+            )
+        else:
+            result = process_urls(
+                urls=source['urls'],
+                extract_fields=selected_web_fields,
+                column_aliases=generated_aliases,
+                rules=generated_rules,
+            )
         st.session_state['automation_result'] = {
             'output': result['output'],
             'rejected': result['rejected'],
             'summary': result['summary'],
             'column_aliases': generated_aliases,
             'rules': generated_rules,
+            'extracted': result.get('extracted'),
         }
 
     if 'automation_result' not in st.session_state:
@@ -291,63 +352,47 @@ def main() -> None:
 
     st.subheader('4) Results')
     metrics = st.columns(4)
-    metrics[0].metric('Files processed', summary['files_processed'])
+    metric_label = 'Sources processed' if summary.get('source_mode') == 'web' else 'Files processed'
+    metric_value = summary.get('urls_processed', summary.get('files_processed', 0))
+    metrics[0].metric(metric_label, metric_value)
     metrics[1].metric('Rows read', summary['rows_read'])
     metrics[2].metric('Rows after cleaning', summary['rows_after_cleaning'])
     metrics[3].metric('Invalid rows', summary['invalid_rows'])
+    if summary.get('source_mode') == 'web':
+        web_metrics = st.columns(2)
+        web_metrics[0].metric('Successful fetches', summary.get('successful_fetches', 0))
+        web_metrics[1].metric('Failed fetches', summary.get('failed_fetches', 0))
 
-    output_tab, rejected_tab, summary_tab = st.tabs(['Clean output', 'Rejected rows', 'Summary'])
-    with output_tab:
+    tab_names = ['Clean output', 'Rejected rows', 'Summary']
+    if result.get('extracted') is not None:
+        tab_names.insert(0, 'Extracted raw data')
+    tabs = st.tabs(tab_names)
+    tab_lookup = dict(zip(tab_names, tabs))
+
+    if 'Extracted raw data' in tab_lookup:
+        with tab_lookup['Extracted raw data']:
+            st.dataframe(result['extracted'], use_container_width=True)
+    with tab_lookup['Clean output']:
         st.dataframe(result['output'], use_container_width=True)
-    with rejected_tab:
+    with tab_lookup['Rejected rows']:
         st.dataframe(result['rejected'], use_container_width=True)
-    with summary_tab:
+    with tab_lookup['Summary']:
         st.json(summary)
 
     download_left, download_right, download_third = st.columns(3)
     with download_left:
-        st.download_button(
-            'Download master.csv',
-            data=dataframe_to_csv_bytes(result['output']),
-            file_name='master.csv',
-            mime='text/csv',
-            use_container_width=True,
-        )
+        st.download_button('Download master.csv', data=dataframe_to_csv_bytes(result['output']), file_name='master.csv', mime='text/csv', use_container_width=True)
     with download_right:
-        st.download_button(
-            'Download rejected_rows.csv',
-            data=dataframe_to_csv_bytes(result['rejected']),
-            file_name='rejected_rows.csv',
-            mime='text/csv',
-            use_container_width=True,
-        )
+        st.download_button('Download rejected_rows.csv', data=dataframe_to_csv_bytes(result['rejected']), file_name='rejected_rows.csv', mime='text/csv', use_container_width=True)
     with download_third:
-        st.download_button(
-            'Download summary.json',
-            data=summary_to_json_bytes(summary),
-            file_name='summary.json',
-            mime='application/json',
-            use_container_width=True,
-        )
+        st.download_button('Download summary.json', data=summary_to_json_bytes(summary), file_name='summary.json', mime='application/json', use_container_width=True)
 
     with st.expander('Download generated config', expanded=False):
         config_left, config_right = st.columns(2)
         with config_left:
-            st.download_button(
-                'Download column_mapping.json',
-                data=summary_to_json_bytes(result['column_aliases']),
-                file_name='column_mapping.json',
-                mime='application/json',
-                use_container_width=True,
-            )
+            st.download_button('Download column_mapping.json', data=summary_to_json_bytes(result['column_aliases']), file_name='column_mapping.json', mime='application/json', use_container_width=True)
         with config_right:
-            st.download_button(
-                'Download rules.json',
-                data=summary_to_json_bytes(result['rules']),
-                file_name='rules.json',
-                mime='application/json',
-                use_container_width=True,
-            )
+            st.download_button('Download rules.json', data=summary_to_json_bytes(result['rules']), file_name='rules.json', mime='application/json', use_container_width=True)
 
 
 if __name__ == '__main__':
