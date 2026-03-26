@@ -53,3 +53,22 @@ def test_extract_record_from_html_keeps_multiple_emails() -> None:
 
     assert record['emails_found'] == 'press@example.org; fundraising@example.org'
 
+
+def test_extract_record_from_html_excludes_year_ranges_from_phone_matches() -> None:
+    html = """
+    <html>
+      <body>
+        <p>Project period: 2001-2026</p>
+        <p>Call us at +1 (858) 712-8966</p>
+      </body>
+    </html>
+    """
+
+    record = extract_record_from_html(
+        url='https://example.org',
+        html=html,
+        extract_fields=['phones_found'],
+    )
+
+    assert '2001-2026' not in (record['phones_found'] or '')
+    assert '858' in (record['phones_found'] or '')

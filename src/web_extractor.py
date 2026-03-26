@@ -15,6 +15,7 @@ except ImportError:
 
 EMAIL_PATTERN = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 PHONE_PATTERN = re.compile(r"(?:\+?\d[\d().\-\s]{7,}\d)")
+YEAR_RANGE_PATTERN = re.compile(r"^\s*(?:19|20)\d{2}\s*-\s*(?:19|20)\d{2}\s*$")
 
 
 def _clean_text(text: str | None) -> str | None:
@@ -33,6 +34,22 @@ def _collect_unique(matches: list[str]) -> str | None:
     return '; '.join(seen) if seen else None
 
 
+def _is_valid_phone_candidate(value: str) -> bool:
+    candidate = ' '.join(value.split()).strip()
+    if not candidate:
+        return False
+
+    # Exclude year spans like 2001-2026 that happen to match the loose phone regex.
+    if YEAR_RANGE_PATTERN.match(candidate):
+        return False
+
+    digits_only = re.sub(r"\D", "", candidate)
+    if len(digits_only) < 7 or len(digits_only) > 15:
+        return False
+
+    return True
+
+
 def extract_record_from_html(url: str, html: str, extract_fields: list[str] | None = None) -> dict[str, str | None]:
     fields = set(extract_fields or ['page_title', 'meta_description', 'h1', 'emails_found', 'phones_found'])
     soup = BeautifulSoup(html, 'html.parser')
@@ -43,7 +60,13 @@ def extract_record_from_html(url: str, html: str, extract_fields: list[str] | No
     h1_tag = soup.find('h1') if 'h1' in fields else None
     h1 = _clean_text(h1_tag.get_text()) if h1_tag else None
     emails = _collect_unique(EMAIL_PATTERN.findall(html)) if 'emails_found' in fields else None
-    phones = _collect_unique(PHONE_PATTERN.findall(html)) if 'phones_found' in fields else None
+
+    if 'phones_found' in fields:
+        raw_phone_matches = PHONE_PATTERN.findall(html)
+        valid_phone_matches = [match for match in raw_phone_matches if _is_valid_phone_candidate(match)]
+        phones = _collect_unique(valid_phone_matches)
+    else:
+        phones = None
 
     return {
         'source_url': url,
