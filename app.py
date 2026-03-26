@@ -173,7 +173,7 @@ def get_available_input() -> dict:
         return {'kind': 'files', 'dataframes': dataframes, 'file_names': file_names}
 
     if source_mode == 'Enter a single URL':
-        url = st.text_input('Public webpage URL', placeholder='https://example.com')
+        url = st.text_input('Public webpage URL', placeholder='https://www.python.org/psf/faq/')
         urls = [url] if url else []
         return {'kind': 'web', 'urls': urls, 'labels': urls}
 
@@ -188,7 +188,10 @@ def get_available_input() -> dict:
             return {'kind': 'web', 'urls': [], 'labels': []}
         return {'kind': 'web', 'urls': urls, 'labels': [uploaded_url_file.name]}
 
-    pasted_urls = st.text_area('Paste one URL per line', placeholder='https://example.com\nhttps://www.python.org')
+    pasted_urls = st.text_area(
+        'Paste one URL per line',
+        placeholder='https://www.python.org/psf/faq/\nhttps://wikimediafoundation.org/contact/\nhttps://www.apache.org/foundation/contact'
+    )
     urls = parse_pasted_urls(pasted_urls) if pasted_urls else []
     return {'kind': 'web', 'urls': urls, 'labels': ['pasted_url_list'] if urls else []}
 
