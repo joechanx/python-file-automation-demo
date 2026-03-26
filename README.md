@@ -7,7 +7,7 @@ A lightweight, config-driven Python automation tool with a simple Streamlit UI f
 
 ## Live Demo
 
-**Demo URL:** https://your-railway-domain.up.railway.app
+**Demo URL:** [Home](https://python-file-automation-demo-production.up.railway.app)
 
 > Upload spreadsheet files or enter public URLs, then run a reusable automation workflow that extracts, cleans, deduplicates, and exports business-ready output files.
 
