@@ -1,5 +1,0 @@
-name,email,phone,date,company,status,amount,_source_file
-Alice Chen Duplicate,alice@example.com,0912345678,2026-03-19,,,1000.00,customers_february.xlsx
-Cathy Wu,cathy@example.com,0212345678,2026-03-21,,,-1200.75,customers_february.xlsx
-Bob Lin,bob@example.com,0922111333,2026-03-20,,,2500.50,customers_january.csv
-Eric Huang,eric@example.com,0900123456,2026-03-22,,,900.00,leads_sample.csv
