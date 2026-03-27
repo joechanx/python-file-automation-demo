@@ -2,7 +2,7 @@
 
 A compact portfolio demo that shows how I build Python workflows for cleaning, standardizing, merging, and exporting business data with a simple UI.
 
-**Live Demo:** [Demo URL](https://python-file-automation-demo-production.up.railway.app)
+**Live Demo:** [Demo URL](https://automation-demo.whotech.com.tw/)
 
 > This repository is published for portfolio review and client evaluation.
 > It is a demo, not a full production package.
